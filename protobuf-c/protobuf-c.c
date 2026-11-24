@@ -2093,10 +2093,10 @@ parse_tag_and_wiretype(size_t len,
 	}
 	for (rv = 1; rv < max_rv; rv++) {
 		if (data[rv] & 0x80) {
-			tag |= (data[rv] & 0x7f) << shift;
+			tag |= ((uint32_t) (data[rv] & 0x7f)) << shift;
 			shift += 7;
 		} else {
-			tag |= data[rv] << shift;
+			tag |= ((uint32_t) data[rv]) << shift;
 			*tag_out = tag;
 			return rv + 1;
 		}
@@ -2759,7 +2759,8 @@ parse_packed_repeated_member(ScannedMember *scanned_member,
 	const ProtobufCFieldDescriptor *field = scanned_member->field;
 	size_t *p_n = STRUCT_MEMBER_PTR(size_t, message, field->quantifier_offset);
 	size_t siz = sizeof_elt_in_repeated_array(field->type);
-	void *array = *(char **) member + siz * (*p_n);
+	char *array_base = *(char **) member;
+	void *array = (array_base != NULL) ? (void *) (array_base + siz * (*p_n)) : NULL;
 	const uint8_t *at = scanned_member->data + scanned_member->length_prefix_len;
 	size_t rem = scanned_member->len - scanned_member->length_prefix_len;
 	size_t count = 0;
@@ -2877,8 +2878,10 @@ parse_packed_repeated_member(ScannedMember *scanned_member,
 
 #if !defined(WORDS_BIGENDIAN)
 no_unpacking_needed:
-	memcpy(array, at, count * siz);
-	*p_n += count;
+	if (count > 0) {
+		memcpy(array, at, count * siz);
+		*p_n += count;
+	}
 	return TRUE;
 #endif
 }
@@ -3043,7 +3046,7 @@ protobuf_c_message_unpack(const ProtobufCMessageDescriptor *desc,
 	ProtobufCMessage *rv;
 	size_t rem = len;
 	const uint8_t *at = data;
-	const ProtobufCFieldDescriptor *last_field = desc->fields + 0;
+	const ProtobufCFieldDescriptor *last_field = desc->fields;
 	ScannedMember first_member_slab[1UL <<
 					FIRST_SCANNED_MEMBER_SLAB_SIZE_LOG2];
 
